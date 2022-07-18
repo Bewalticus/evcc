@@ -23,7 +23,8 @@ require (
 	github.com/dustin/go-humanize v1.0.0
 	github.com/dylanmei/iso8601 v0.1.0
 	github.com/eclipse/paho.mqtt.golang v1.3.5
-	github.com/evcc-io/eebus v0.0.0-20220403153356-c4f2bab5546f
+	github.com/emirpasic/gods v1.18.1
+	github.com/evcc-io/eebus v0.0.0-20220628095038-be707d322cfc
 	github.com/fatih/structs v1.1.0
 	github.com/foogod/go-powerwall v0.2.0
 	github.com/go-ping/ping v1.1.0
@@ -45,7 +46,7 @@ require (
 	github.com/itchyny/gojq v0.12.8
 	github.com/jeremywohl/flatten v1.0.1
 	github.com/jinzhu/copier v0.3.5
-	github.com/joeshaw/carwings v0.0.0-20220225151533-185ade10e0de
+	github.com/joeshaw/carwings v0.0.0-20220711204617-d90801cf2848
 	github.com/jpfielding/go-http-digest v0.0.0-20211006141426-fbc93758452e
 	github.com/kballard/go-shellquote v0.0.0-20180428030007-95032a82bc51
 	github.com/koron/go-ssdp v0.0.3
