@@ -46,15 +46,11 @@ export default {
       pvExport: "Grid export",
     },
     mode: {
-      title: "Modalità",
       stop: "Stop",
+      minpv: "Min+FV",
+      pv: "FV",
       now: "Ora",
-      minpvShort: "Min",
-      minpvLong: "Min + FV",
-      pvShort: "FV",
-      pvLong: "Solo FV",
-      gridShort: "Rete",
-      gridLong: "Rete Prio",
+      grid: "Rete+",
     },
     loadpoint: {
       fallbackName: "Punto di carica",
