@@ -46,6 +46,7 @@ export default {
 	border: 2px solid var(--evcc-default-text);
 	border-radius: 20px;
 	padding: 4px;
+	flex-wrap: wrap;
 }
 
 .btn {
