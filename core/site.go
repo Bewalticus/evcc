@@ -9,6 +9,7 @@ import (
 
 	"github.com/avast/retry-go/v3"
 	"github.com/evcc-io/evcc/api"
+	"github.com/evcc-io/evcc/core/coordinator"
 	"github.com/evcc-io/evcc/core/loadpoint"
 	"github.com/evcc-io/evcc/push"
 	"github.com/evcc-io/evcc/tariff"
@@ -45,9 +46,10 @@ type Site struct {
 	pvMeters      []api.Meter // PV generation meters
 	batteryMeters []api.Meter // Battery charging meters
 
-	tariffs    tariff.Tariffs // Tariff
-	loadpoints []*LoadPoint   // Loadpoints
-	savings    *Savings       // Savings
+	tariffs     tariff.Tariffs           // Tariff
+	loadpoints  []*LoadPoint             // Loadpoints
+	coordinator *coordinator.Coordinator // Savings
+	savings     *Savings                 // Savings
 
 	// cached state
 	gridPower       float64 // Grid power
@@ -72,6 +74,7 @@ func NewSiteFromConfig(
 	cp configProvider,
 	other map[string]interface{},
 	loadpoints []*LoadPoint,
+	vehicles []api.Vehicle,
 	tariffs tariff.Tariffs,
 ) (*Site, error) {
 	site := NewSite()
@@ -82,7 +85,13 @@ func NewSiteFromConfig(
 	Voltage = site.Voltage
 	site.loadpoints = loadpoints
 	site.tariffs = tariffs
+	site.coordinator = coordinator.New(log, vehicles)
 	site.savings = NewSavings(tariffs)
+
+	// give loadpoints access to vehicles
+	for _, lp := range loadpoints {
+		lp.coordinator = coordinator.NewAdapter(lp, site.coordinator)
+	}
 
 	if site.Meters.GridMeterRef != "" {
 		site.gridMeter = cp.Meter(site.Meters.GridMeterRef)
@@ -161,6 +170,16 @@ func meterCapabilities(name string, meter interface{}) string {
 
 // DumpConfig site configuration
 func (site *Site) DumpConfig() {
+	// verify vehicle detection
+	if vehicles := site.GetVehicles(); len(vehicles) > 1 {
+		for _, v := range vehicles {
+			if _, ok := v.(api.ChargeState); !ok {
+				site.log.WARN.Printf("vehicle '%s' does not support automatic detection", v.Title())
+				break
+			}
+		}
+	}
+
 	site.log.INFO.Println("site config:")
 	site.log.INFO.Printf("  meters:      grid %s pv %s battery %s",
 		presence[site.gridMeter != nil],
@@ -188,6 +207,21 @@ func (site *Site) DumpConfig() {
 		}
 	}
 
+	if vehicles := site.GetVehicles(); len(vehicles) > 0 {
+		site.log.INFO.Println("  vehicles:")
+
+		for i, v := range vehicles {
+			_, rng := v.(api.VehicleRange)
+			_, finish := v.(api.VehicleFinishTimer)
+			_, status := v.(api.ChargeState)
+			_, climate := v.(api.VehicleClimater)
+			_, wakeup := v.(api.Resurrector)
+			site.log.INFO.Printf("    vehicle %d: range %s finish %s status %s climate %s wakeup %s",
+				i+1, presence[rng], presence[finish], presence[status], presence[climate], presence[wakeup],
+			)
+		}
+	}
+
 	for i, lp := range site.loadpoints {
 		lp.log.INFO.Printf("loadpoint %d:", i+1)
 		lp.log.INFO.Printf("  mode:        %s", lp.GetMode())
@@ -195,8 +229,8 @@ func (site *Site) DumpConfig() {
 		_, power := lp.charger.(api.Meter)
 		_, energy := lp.charger.(api.MeterEnergy)
 		_, currents := lp.charger.(api.MeterCurrent)
-		_, phases := lp.charger.(api.ChargePhases)
-		_, wakeup := lp.charger.(api.AlarmClock)
+		_, phases := lp.charger.(api.PhaseSwitcher)
+		_, wakeup := lp.charger.(api.Resurrector)
 
 		lp.log.INFO.Printf("  charger:     power %s energy %s currents %s phases %s wakeup %s",
 			presence[power],
@@ -211,19 +245,6 @@ func (site *Site) DumpConfig() {
 		lp.publish("chargeConfigured", lp.HasChargeMeter())
 		if lp.HasChargeMeter() {
 			lp.log.INFO.Printf(meterCapabilities("charge", lp.chargeMeter))
-		}
-
-		lp.log.INFO.Printf("  vehicles:    %s", presence[len(lp.vehicles) > 0])
-
-		for i, v := range lp.vehicles {
-			_, rng := v.(api.VehicleRange)
-			_, finish := v.(api.VehicleFinishTimer)
-			_, status := v.(api.ChargeState)
-			_, climate := v.(api.VehicleClimater)
-			_, wakeup := v.(api.AlarmClock)
-			lp.log.INFO.Printf("    vehicle %d: range %s finish %s status %s climate %s wakeup %s",
-				i+1, presence[rng], presence[finish], presence[status], presence[climate], presence[wakeup],
-			)
 		}
 	}
 }
@@ -377,7 +398,7 @@ func (site *Site) sitePower(totalChargePower float64) (float64, error) {
 				socs += soc / float64(len(site.batteryMeters))
 			}
 		}
-		site.publish("batterySoC", math.Trunc(socs))
+		site.publish("batterySoC", math.Round(socs))
 		site.batterySoC = socs
 
 		site.Lock()
@@ -462,6 +483,8 @@ func (site *Site) prepare() {
 
 	site.publish("currency", site.tariffs.Currency.String())
 	site.publish("savingsSince", site.savings.Since().Unix())
+
+	site.publish("vehicles", vehicleTitles(site.GetVehicles()))
 	site.publish("gridPriorityPower", site.GridPriorityPower)
 }
 
@@ -491,9 +514,6 @@ func (site *Site) Prepare(uiChan chan<- util.Param, pushChan chan<- push.Event) 
 		}(id)
 
 		lp.Prepare(lpUIChan, lpPushChan, site.lpUpdateChan)
-
-		// add loadpoint number
-		lp.publish("loadpoint", id+1)
 	}
 }
 

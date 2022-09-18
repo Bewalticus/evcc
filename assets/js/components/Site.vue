@@ -18,9 +18,10 @@
 			<Loadpoints
 				class="mt-1 mt-sm-2 flex-grow-1"
 				:loadpoints="loadpoints"
+				:vehicles="vehicles"
 				:gridPriorityPower="gridPriorityPower"
 			/>
-			<Vehicles v-if="$hiddenFeatures" />
+			<Vehicles v-if="showParkingLot" />
 			<Footer v-bind="footer"></Footer>
 		</div>
 	</div>
@@ -68,6 +69,7 @@ export default {
 		gridCurrents: Array,
 		prioritySoC: Number,
 		siteTitle: String,
+		vehicles: Array,
 		gridPriorityPower: Number,
 
 		auth: Object,
@@ -107,6 +109,10 @@ export default {
 		topNavigation: function () {
 			const vehicleLogins = this.auth ? this.auth.vehicles : {};
 			return { vehicleLogins };
+		},
+		showParkingLot: function () {
+			// work in progess
+			return false;
 		},
 		footer: function () {
 			return {
