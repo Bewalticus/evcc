@@ -1,9 +1,9 @@
 package ocpp
 
 import (
+	"errors"
 	"fmt"
 	"sync"
-	"time"
 
 	"github.com/evcc-io/evcc/util"
 	ocpp16 "github.com/lorenzodonini/ocpp-go/ocpp1.6"
@@ -13,27 +13,34 @@ import (
 type CS struct {
 	mu  sync.Mutex
 	log *util.Logger
-	cs  ocpp16.CentralSystem
+	ocpp16.CentralSystem
 	cps map[string]*CP
 }
 
-func (cs *CS) Register(id string, meterSupported bool) *CP {
-	cp := &CP{
-		id:                        id,
-		log:                       util.NewLogger("ocpp-cp"),
-		latestMeterValueTimestamp: time.Now(),
-		measureands:               make(map[string]types.SampledValue),
-		meterSupported:            meterSupported,
+func (cs *CS) Register(id string) (*CP, error) {
+	unit := "ocpp"
+	if id != "" {
+		unit = id
 	}
 
-	cp.initialized = sync.NewCond(&cp.mu)
+	cp := &CP{
+		id:           id,
+		log:          util.NewLogger(unit),
+		bootC:        make(chan struct{}),
+		statusC:      make(chan struct{}),
+		measurements: make(map[string]types.SampledValue),
+	}
 
 	cs.mu.Lock()
 	defer cs.mu.Unlock()
 
+	if _, ok := cs.cps[id]; ok && id == "" {
+		return nil, errors.New("cannot have >1 chargepoint with empty station id")
+	}
+
 	cs.cps[id] = cp
 
-	return cp
+	return cp, nil
 }
 
 // errorHandler logs error channel
@@ -56,27 +63,32 @@ func (cs *CS) NewChargePoint(chargePoint ocpp16.ChargePointConnection) {
 	defer cs.mu.Unlock()
 
 	if _, err := cs.chargepointByID(chargePoint.ID()); err != nil {
-		cs.log.WARN.Println(err)
+		if cp, ok := cs.cps[""]; ok {
+			cs.log.INFO.Printf("chargepoint connected, registering: %s", chargePoint.ID())
 
-		cs.log.INFO.Printf("new chargepoint with ID (%s) detected, atempting to remap", chargePoint.ID())
-		if unknownIDCP, ok := cs.cps[""]; ok && unknownIDCP != nil {
-			cs.mu.Lock()
-			unknownIDCP.id = chargePoint.ID()
-			cs.cps[chargePoint.ID()] = unknownIDCP
-			delete(cs.cps, "") // remove unknownID key
-			cs.mu.Unlock()
+			// update id
+			cp.RegisterID(chargePoint.ID())
+			cs.cps[chargePoint.ID()] = cp
+			delete(cs.cps, "")
+
+			return
 		}
+
+		cs.log.WARN.Printf("chargepoint connected, ignoring: %s", chargePoint.ID())
+	} else {
+		cs.log.DEBUG.Printf("chargepoint connected: %s", chargePoint.ID())
 	}
 }
 
 func (cs *CS) ChargePointDisconnected(chargePoint ocpp16.ChargePointConnection) {
-	if _, err := cs.chargepointByID(chargePoint.ID()); err != nil {
-		cs.log.ERROR.Println(err)
-	}
-}
+	cs.mu.Lock()
+	defer cs.mu.Unlock()
 
-func (cs *CS) CS() ocpp16.CentralSystem {
-	return cs.cs
+	if _, err := cs.chargepointByID(chargePoint.ID()); err != nil {
+		cs.log.ERROR.Printf("chargepoint disconnected: %v", err)
+	} else {
+		cs.log.DEBUG.Printf("chargepoint disconnected: %s", chargePoint.ID())
+	}
 }
 
 func (cs *CS) Debug(args ...interface{}) {
