@@ -12,7 +12,12 @@
 				/>
 			</div>
 			<div class="mb-3 d-flex align-items-center">
-				<Mode class="flex-grow-1" :mode="mode" @updated="setTargetMode" :gridPriorityPower="gridPriorityPower" />
+				<Mode
+					class="flex-grow-1"
+					:mode="mode"
+					:gridPriorityPower="gridPriorityPower"
+					@updated="setTargetMode"
+				/>
 				<LoadpointSettingsButton
 					v-if="settingsButtonVisible"
 					:id="id"

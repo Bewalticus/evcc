@@ -272,7 +272,7 @@ func TestReconnectVehicle(t *testing.T) {
 	// vehicle not updated yet
 	vehicle.MockChargeState.EXPECT().Status().Return(api.StatusA, nil)
 
-	lp.Update(0, false, false)
+	lp.Update(0, false, false, 0.0)
 	ctrl.Finish()
 
 	// detection started
@@ -290,7 +290,7 @@ func TestReconnectVehicle(t *testing.T) {
 	// vehicle not updated yet
 	vehicle.MockChargeState.EXPECT().Status().Return(api.StatusB, nil)
 
-	lp.Update(0, false, false)
+	lp.Update(0, false, false, 0.0)
 	ctrl.Finish()
 
 	// vehicle detected

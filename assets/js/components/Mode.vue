@@ -47,6 +47,7 @@ export default {
 	border-radius: 20px;
 	padding: 4px;
 	min-width: 255px;
+	flex-wrap: wrap;
 }
 
 .btn {
